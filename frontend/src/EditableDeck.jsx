@@ -20,6 +20,8 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import AddIcon from '@mui/icons-material/Add';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import SendIcon from '@mui/icons-material/Send';
+// Import helpers from App.jsx
+import { regenerateSlideApi, generateSpeakerNotesApi } from './App';
 
 const SIDEBAR_WIDTH = 180;
 
@@ -37,34 +39,6 @@ function getDefaultSlide(idx) {
     title: `New Slide ${idx + 1}`,
     content: '',
   };
-}
-
-// Mock AI slide regeneration
-function regenerateMockSlide(slideId, feedback, prevSlide) {
-  // Simulate GPT-style varied output for content only
-  const contentVariations = [
-    `This is a regenerated version of the slide content. ${feedback ? 'Feedback: ' + feedback + '. ' : ''}The content is now more professional, engaging, and tailored to your needs.`,
-    `Based on your feedback${feedback ? ' (“' + feedback + '”)' : ''}, this content is now clearer, more persuasive, and audience-focused.`,
-    `AI Regenerated Content: ${feedback ? feedback + '. ' : ''}This slide now uses improved structure and language for maximum impact.`,
-  ];
-  const newContent = contentVariations[Math.floor(Math.random() * contentVariations.length)];
-  return {
-    ...prevSlide,
-    // Keep the title unchanged
-    content: newContent,
-  };
-}
-
-// Mock AI speaker notes/chatbot
-function generateMockSpeakerNotes(slideContent, userMessage) {
-  const responses = [
-    `Emphasize the key point: "${slideContent.slice(0, 40)}...". Use a confident tone and connect with the audience.`,
-    `Here's a persuasive note: Highlight the benefits and address potential objections.`,
-    `To make this slide more engaging, start with a question, then deliver the main message clearly.`,
-    `Focus on clarity and enthusiasm. Relate the content to real-world examples.`,
-    `Use storytelling to illustrate your point and keep the audience interested.`,
-  ];
-  return responses[Math.floor(Math.random() * responses.length)];
 }
 
 export default function EditableDeck({ slides: initialSlides }) {
@@ -109,21 +83,19 @@ export default function EditableDeck({ slides: initialSlides }) {
   // Regenerate individual slide
   const handleRegenerate = async (slideId) => {
     setRegenLoading(l => ({ ...l, [slideId]: true }));
-    setTimeout(() => {
-      setSlides(prev =>
-        prev.map(slide =>
-          slide.id === slideId
-            ? regenerateMockSlide(slideId, feedback[slideId], slide)
-            : slide
-        )
-      );
-      setRegenLoading(l => ({ ...l, [slideId]: false }));
-      setFeedback(f => ({ ...f, [slideId]: '' }));
-    }, 1200);
+    const slide = slides.find(s => s.id === slideId);
+    try {
+      const regenerated = await regenerateSlideApi(slide, feedback[slideId]);
+      setSlides(prev => prev.map(s => (s.id === slideId ? { ...regenerated, id: slideId } : s)));
+    } catch (e) {
+      // Optionally handle error
+    }
+    setRegenLoading(l => ({ ...l, [slideId]: false }));
+    setFeedback(f => ({ ...f, [slideId]: '' }));
   };
 
   // Chatbot for speaker notes
-  const handleChatSubmit = (slideId) => {
+  const handleChatSubmit = async (slideId) => {
     const userMsg = chatInput[slideId]?.trim();
     if (!userMsg) return;
     setChatLoading(l => ({ ...l, [slideId]: true }));
@@ -132,16 +104,20 @@ export default function EditableDeck({ slides: initialSlides }) {
       [slideId]: [...(h[slideId] || []), { user: 'user', text: userMsg }],
     }));
     setChatInput(i => ({ ...i, [slideId]: '' }));
-    setTimeout(() => {
+    try {
+      const slide = slides.find(s => s.id === slideId);
+      const aiReply = await generateSpeakerNotesApi(slide.title, slide.content);
       setChatHistory(h => ({
         ...h,
         [slideId]: [
           ...(h[slideId] || []),
-          { user: 'ai', text: generateMockSpeakerNotes(slides.find(s => s.id === slideId)?.content || '', userMsg) },
+          { user: 'ai', text: aiReply },
         ],
       }));
-      setChatLoading(l => ({ ...l, [slideId]: false }));
-    }, 1200);
+    } catch (e) {
+      // Optionally handle error
+    }
+    setChatLoading(l => ({ ...l, [slideId]: false }));
   };
 
   const selectedSlide = slides.find(s => s.id === selectedSlideId) || slides[0];

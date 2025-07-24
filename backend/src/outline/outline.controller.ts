@@ -1,14 +1,25 @@
-// MOCK USAGE: This controller uses generateMockSlides instead of the real OpenAI service
-// because OpenAI free credit has run out. This is a temporary change to allow continued development/testing.
-// Replace with the real OpenAI call when access is restored.
 import { Controller, Post, Body } from '@nestjs/common';
-import { generateMockSlides, Slide } from '../openai/openai.service';
+import { GeminiService, Slide } from '../gemini/gemini.service';
 
-@Controller('generate-outline')
+@Controller()
 export class OutlineController {
-  @Post()
+  constructor(private readonly geminiService: GeminiService) {}
+
+  @Post('generate-outline')
   async generate(@Body('prompt') prompt: string): Promise<{ slides: Slide[] }> {
-    const slides = generateMockSlides(prompt);
+    const slides = await this.geminiService.generateDeck(prompt);
     return { slides };
+  }
+
+  @Post('regenerate-slide')
+  async regenerateSlide(@Body() body: { slide: Slide; feedback: string }): Promise<{ slide: Slide }> {
+    const slide = await this.geminiService.regenerateSlide(body.slide, body.feedback);
+    return { slide };
+  }
+
+  @Post('speaker-notes')
+  async speakerNotes(@Body() body: { title: string; content: string }): Promise<{ notes: string }> {
+    const notes = await this.geminiService.generateSpeakerNotes(body.title, body.content);
+    return { notes };
   }
 }
