@@ -1,3 +1,7 @@
+// EditableDeck.jsx
+//
+// Interactive pitch deck editor for SlideGenius. Allows users to view, edit, reorder, regenerate, and chat about slides. Supports PDF and PowerPoint export.
+
 import React, { useState } from 'react';
 import {
   Box,
@@ -20,11 +24,24 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import AddIcon from '@mui/icons-material/Add';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import SendIcon from '@mui/icons-material/Send';
-// Import helpers from App.jsx
-import { regenerateSlideApi, generateSpeakerNotesApi } from './App';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import SlideshowIcon from '@mui/icons-material/Slideshow';
+import jsPDF from 'jspdf';
+import PPTXGenJS from 'pptxgenjs';
+import { regenerateSlideApi, generateSpeakerNotesApi } from './slideApi';
+import { auth } from './firebase';
+import { signOut } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 
 const SIDEBAR_WIDTH = 180;
 
+/**
+ * Reorders slides after drag-and-drop.
+ * @param {Array} list - The current slides array.
+ * @param {number} startIndex - Drag start index.
+ * @param {number} endIndex - Drop index.
+ * @returns {Array} New reordered slides array.
+ */
 function reorder(list, startIndex, endIndex) {
   const result = Array.from(list);
   const [removed] = result.splice(startIndex, 1);
@@ -32,6 +49,10 @@ function reorder(list, startIndex, endIndex) {
   return result.map((slide, idx) => ({ ...slide, slideNumber: idx + 1 }));
 }
 
+/**
+ * Returns a default new slide object.
+ * @param {number} idx - Index for slide number.
+ */
 function getDefaultSlide(idx) {
   return {
     id: `${Date.now()}-${Math.random()}`,
@@ -41,17 +62,76 @@ function getDefaultSlide(idx) {
   };
 }
 
+/**
+ * Exports the current deck as a PDF file using jsPDF.
+ * @param {Array} slides - Array of slide objects.
+ */
+export function handleDownloadPDF(slides) {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  slides.forEach((slide, idx) => {
+    if (idx !== 0) doc.addPage();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text(slide.title || `Slide ${slide.slideNumber}`, 40, 80);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(14);
+    // Split content into bullet points if possible
+    const bullets = (slide.content || '').split(/\n|•|\-/).map(s => s.trim()).filter(Boolean);
+    let y = 120;
+    bullets.forEach(bullet => {
+      doc.text(`• ${bullet}`, 60, y, { maxWidth: 480 });
+      y += 28;
+    });
+  });
+  doc.save('SlideGenius_PitchDeck.pdf');
+}
+
+/**
+ * Exports the current deck as a PowerPoint file using pptxgenjs.
+ * @param {Array} slides - Array of slide objects.
+ */
+export async function handleDownloadPPTX(slides) {
+  const module = await import('pptxgenjs');
+  const PPTXGenJS = module.default;
+  const pptx = new PPTXGenJS();
+  slides.forEach(slide => {
+    const slideObj = pptx.addSlide();
+    slideObj.addText(slide.title || '', {
+      x: 0.5, y: 0.5, w: 9, h: 1,
+      fontSize: 28, bold: true, color: '003399', align: 'center', fontFace: 'Arial'
+    });
+    // Split content into bullet points, join with line breaks, and use bullet: true
+    const bullets = (slide.content || '').split(/\n|•|-/).map(s => s.trim()).filter(Boolean);
+    slideObj.addText(bullets.join('\n'), {
+      x: 0.7, y: 1.5, w: 8.5, h: 4.5,
+      fontSize: 18, color: '222222', fontFace: 'Arial', align: 'left', bullet: true
+    });
+  });
+  pptx.writeFile({ fileName: 'SlideGenius_PitchDeck.pptx' });
+}
+
+/**
+ * EditableDeck React component
+ * @param {Object} props
+ * @param {Array} props.slides - Initial slides array
+ * @returns {JSX.Element}
+ */
 export default function EditableDeck({ slides: initialSlides }) {
+  // Add unique IDs to slides if missing
   const withIds = initialSlides.map((s, i) => ({ id: s.id || `${Date.now()}-${i}`, ...s }));
+  // State for slides, selected slide, feedback, chat, and loading
   const [slides, setSlides] = useState(withIds.map(({ image, ...rest }) => rest));
   const [selectedSlideId, setSelectedSlideId] = useState(withIds[0]?.id || null);
-  // Per-slide feedback and chat state
-  const [feedback, setFeedback] = useState({}); // { [slideId]: string }
-  const [chatInput, setChatInput] = useState({}); // { [slideId]: string }
-  const [chatHistory, setChatHistory] = useState({}); // { [slideId]: [{ user, text }] }
-  const [regenLoading, setRegenLoading] = useState({}); // { [slideId]: boolean }
-  const [chatLoading, setChatLoading] = useState({}); // { [slideId]: boolean }
+  const [feedback, setFeedback] = useState({}); // Per-slide feedback
+  const [chatInput, setChatInput] = useState({}); // Per-slide chat input
+  const [chatHistory, setChatHistory] = useState({}); // Per-slide chat history
+  const [regenLoading, setRegenLoading] = useState({}); // Per-slide regen loading
+  const [chatLoading, setChatLoading] = useState({}); // Per-slide chat loading
+  const navigate = useNavigate();
 
+  /**
+   * Handles drag-and-drop reordering of slides in the sidebar.
+   */
   const handleSidebarDragEnd = (result) => {
     if (!result.destination) return;
     const newSlides = reorder(slides, result.source.index, result.destination.index);
@@ -62,6 +142,9 @@ export default function EditableDeck({ slides: initialSlides }) {
     }
   };
 
+  /**
+   * Handles changes to slide title/content fields.
+   */
   const handleFieldChange = (slideId, field, value) => {
     setSlides(prev =>
       prev.map(slide =>
@@ -70,6 +153,9 @@ export default function EditableDeck({ slides: initialSlides }) {
     );
   };
 
+  /**
+   * Adds a new blank slide to the deck.
+   */
   const handleAddSlide = () => {
     setSlides(prev => {
       const newSlide = getDefaultSlide(prev.length);
@@ -80,7 +166,9 @@ export default function EditableDeck({ slides: initialSlides }) {
     }, 0);
   };
 
-  // Regenerate individual slide
+  /**
+   * Regenerates an individual slide using the API and user feedback.
+   */
   const handleRegenerate = async (slideId) => {
     setRegenLoading(l => ({ ...l, [slideId]: true }));
     const slide = slides.find(s => s.id === slideId);
@@ -94,7 +182,9 @@ export default function EditableDeck({ slides: initialSlides }) {
     setFeedback(f => ({ ...f, [slideId]: '' }));
   };
 
-  // Chatbot for speaker notes
+  /**
+   * Handles chat input for AI speaker notes assistant.
+   */
   const handleChatSubmit = async (slideId) => {
     const userMsg = chatInput[slideId]?.trim();
     if (!userMsg) return;
@@ -120,8 +210,18 @@ export default function EditableDeck({ slides: initialSlides }) {
     setChatLoading(l => ({ ...l, [slideId]: false }));
   };
 
+  /**
+   * Logs out the user and redirects to login page.
+   */
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate('/login');
+  };
+
+  // Find the currently selected slide
   const selectedSlide = slides.find(s => s.id === selectedSlideId) || slides[0];
 
+  // Main render: sidebar (draggable slides), main canvas (editable slide, regen, chat)
   return (
     <Box
       sx={{
@@ -136,9 +236,10 @@ export default function EditableDeck({ slides: initialSlides }) {
         borderRadius: 3,
         background: '#fff',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
-      {/* Sidebar */}
+      {/* Sidebar: draggable slide list */}
       <Box
         sx={{
           width: { xs: '100%', md: SIDEBAR_WIDTH },
@@ -221,6 +322,7 @@ export default function EditableDeck({ slides: initialSlides }) {
             )}
           </Droppable>
         </DragDropContext>
+        {/* Add new slide button */}
         <IconButton
           onClick={handleAddSlide}
           sx={{ mt: { md: 2, xs: 0 }, ml: { xs: 2, md: 0 }, color: '#0C21C1', alignSelf: { xs: 'center', md: 'flex-start' } }}
@@ -228,7 +330,7 @@ export default function EditableDeck({ slides: initialSlides }) {
           <AddIcon />
         </IconButton>
       </Box>
-      {/* Main Canvas */}
+      {/* Main Canvas: editable slide, regen, chat */}
       <Box
         sx={{
           flex: 1,
@@ -245,6 +347,7 @@ export default function EditableDeck({ slides: initialSlides }) {
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
               Slide {selectedSlide?.slideNumber}
             </Typography>
+            {/* Editable title */}
             <TextField
               label="Title"
               value={selectedSlide?.title || ''}
@@ -254,6 +357,7 @@ export default function EditableDeck({ slides: initialSlides }) {
               sx={{ mb: 2, borderRadius: 2 }}
               InputProps={{ sx: { borderRadius: '20px', userSelect: 'text' } }}
             />
+            {/* Editable content */}
             <TextField
               label="Content"
               value={selectedSlide?.content || ''}
