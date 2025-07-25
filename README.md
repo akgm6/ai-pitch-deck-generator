@@ -49,21 +49,30 @@ SlideGenius combines real-time AI generation with polished UI design and export-
 ### 1. Clone the Repositories
 
 ### Frontend
-git clone https://github.com/your-username/slidegenius-frontend.git
-cd slidegenius-frontend
+git clone https://github.com/akgm6/ai-pitch-deck-generator/frontend.git
+
+cd frontend
+
 npm install
+
 
 ### Backend
-git clone https://github.com/your-username/slidegenius-backend.git
-cd slidegenius-backend
+git clone https://github.com/akgm6/ai-pitch-deck-generator/backend.git
+
+cd -backend
+
 npm install
 
-## 2. Configure Environment Variables
-Create .env files for both the frontend and backend.
+
+## 2. Configure Environment Variables (optional)
+You can add your own Gemini API key in .env files for both the frontend and backend.
+
 Example for the backend:
+
 GEMINI_API_KEY=your-api-key
-PORT=4000
-*Mocking the Gemini API for local testing is supported if quota or access issues arise.*
+
+*I'm currently mocking the Gemini API since quota or access issues arise.*
+
 
 ## 3. Run Locally
 ### Frontend
@@ -72,29 +81,17 @@ npm run dev
 ### Backend
 npm run start:dev
 
-Ensure both services are running concurrently and communicating via appropriate endpoints.
-
-## Deployment Guide
-*Note: Backend deployment on Render may be unstable due to cold starts or API limitations. Ongoing troubleshooting is in progress.*
-### Frontend (Vercel)
-Link your GitHub repository in the Vercel dashboard
-Enable auto-deploy from the main branch
-Set environment variables under Project → Settings → Environment
-Push to main or click Redeploy to trigger new builds
-Backend (Render)
-Connect the backend repo to Render
-Set required environment variables
-Choose Node environment and specify build command:
-npm run start:prod
 
 ## Known Issues
-### Backend cold start delays may affect reliability
-Gemini API quotas or key issues may block live slide generation
-Fallback to local server testing is advised in cases of deployment failure
-Export features may occasionally fail due to browser compatibility or size limitations
+- Backend cold start delays may affect reliability
+- Gemini API quotas or key issues may block live slide generation
+- Fallback to local server testing is advised in cases of deployment failure
+- Export features may occasionally fail due to browser compatibility or size limitations
+
 
 ## Project Status
 This submission reflects the current completed version of SlideGenius. While deployment challenges remain unresolved, the core functionality, design system, and export capabilities are fully implemented and available in both development and hosted environments.
+
 
 ## Author
 Alexis Gordon-Martin — Full-stack Developer
