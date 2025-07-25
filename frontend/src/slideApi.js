@@ -1,5 +1,7 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
 export async function regenerateSlideApi(slide, feedback) {
-  const res = await fetch('/regenerate-slide', {
+  const res = await fetch(`${API_BASE_URL}/regenerate-slide`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slide, feedback }),
@@ -10,7 +12,7 @@ export async function regenerateSlideApi(slide, feedback) {
 }
 
 export async function generateSpeakerNotesApi(title, content) {
-  const res = await fetch('/speaker-notes', {
+  const res = await fetch(`${API_BASE_URL}/speaker-notes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, content }),

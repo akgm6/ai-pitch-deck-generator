@@ -67,6 +67,7 @@ export default function SlideForm() {
   const theme = useTheme();
   const slidesGenerated = slides.length > 0;
   const navigate = useNavigate();
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
   /**
    * Handles changes to form fields.
@@ -87,7 +88,7 @@ export default function SlideForm() {
     const prompt = buildPrompt(form);
     try {
       // Send request to backend and wait at least 4 seconds for loading effect
-      const fetchPromise = fetch('/generate-outline', {
+      const fetchPromise = fetch(`${API_BASE_URL}/generate-outline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
